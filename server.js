@@ -13,12 +13,31 @@ app.use(express.json());
 app.use(express.static('.'));
 
 // PostgreSQL connection - Render automatically provides DATABASE_URL
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
+// If DATABASE_URL has incomplete hostname, construct from individual parts
+let connectionConfig;
+
+if (process.env.DATABASE_URL) {
+    connectionConfig = {
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+            rejectUnauthorized: false
+        }
+    };
+} else {
+    // Fallback to individual environment variables
+    connectionConfig = {
+        user: 'portfolio_user',
+        host: 'dpg-d6k6c5h5pdvs73dt467g-a.oregon-postgres.render.com',
+        database: 'portfolio_07k0',
+        password: 'M7otsMvwitC5DaBfQGUeWrzsVTSX4ru8',
+        port: 5432,
+        ssl: {
+            rejectUnauthorized: false
+        }
+    };
+}
+
+const pool = new Pool(connectionConfig);
 
 // Initialize database
 async function initializeDatabase() {
