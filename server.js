@@ -11,46 +11,47 @@ app.use(express.static(__dirname));
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
 // Create table if not exists
 pool.query(`
-  CREATE TABLE IF NOT EXISTS messages (
-    id SERIAL PRIMARY KEY,
-    name TEXT,
-    email TEXT,
-    message TEXT
-  )
+CREATE TABLE IF NOT EXISTS messages(
+  id SERIAL PRIMARY KEY,
+  name TEXT,
+  email TEXT,
+  message TEXT
+)
 `)
-.then(() => console.log("Table ready"))
-.catch(err => console.error("Table error:", err));
-
+.then(()=>console.log("Table ready"))
+.catch(err=>console.error("Table error:", err));
 
 // API to save message
-app.post("/contact", async (req, res) => {
-  const { name, email, message } = req.body;
+app.post("/contact", async (req,res)=>{
+  try{
+    const {name,email,message}=req.body;
 
-  try {
     await pool.query(
       "INSERT INTO messages(name,email,message) VALUES($1,$2,$3)",
-      [name, email, message]
+      [name,email,message]
     );
 
-    res.json({ success: true, message: "Message saved successfully" });
+    res.status(200).json({
+      success:true,
+      message:"Message saved successfully"
+    });
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error saving message to database");
+  }catch(err){
+    console.error(err);
+    res.status(500).json({
+      success:false,
+      message:"Database error"
+    });
   }
 });
 
-
-// Start server
 const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT,()=>{
+  console.log("Server running on port "+PORT);
 });
