@@ -12,40 +12,42 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 
-// PostgreSQL connection
+// PostgreSQL connection - Render automatically provides DATABASE_URL
 const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'shubhamportfolio',
-    password: process.env.DB_PASSWORD || 'Root',
-    port: process.env.DB_PORT || 5432,
+    connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Test database connection
-pool.connect((err, client, release) => {
-    if (err) {
-        console.error('Error connecting to database:', err.stack);
-    } else {
-        console.log('Connected to PostgreSQL database: shubhamportfolio');
-        release();
+// Initialize database
+async function initializeDatabase() {
+    try {
+        // Test connection
+        const client = await pool.connect();
+        console.log('✅ Connected to PostgreSQL database');
+        
+        // Create table if not exists
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+        
+        await client.query(createTableQuery);
+        console.log('✅ Table "contact_messages" is ready');
+        
+        client.release();
+    } catch (err) {
+        console.error('❌ Database initialization error:', err);
+        console.error('Connection string:', process.env.DATABASE_URL ? 'Set' : 'Not set');
     }
-});
+}
 
-// Create table if not exists
-const createTableQuery = `
-    CREATE TABLE IF NOT EXISTS contact_messages (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-`;
-
-pool.query(createTableQuery)
-    .then(() => console.log('Table "contact_messages" is ready'))
-    .catch(err => console.error('Error creating table:', err));
+// Initialize on startup
+initializeDatabase();
 
 // API endpoint to save contact form data
 app.post('/api/contact', async (req, res) => {
@@ -59,7 +61,10 @@ app.post('/api/contact', async (req, res) => {
         });
     }
 
+    let client;
     try {
+        client = await pool.connect();
+        
         const query = `
             INSERT INTO contact_messages (name, email, message) 
             VALUES ($1, $2, $3) 
@@ -67,7 +72,7 @@ app.post('/api/contact', async (req, res) => {
         `;
         const values = [name, email, message];
         
-        const result = await pool.query(query, values);
+        const result = await client.query(query, values);
         
         res.status(201).json({ 
             success: true, 
@@ -75,11 +80,15 @@ app.post('/api/contact', async (req, res) => {
             data: result.rows[0]
         });
     } catch (error) {
-        console.error('Error saving message:', error);
+        console.error('❌ Error saving message:', error.message);
+        console.error('Error details:', error);
         res.status(500).json({ 
             success: false, 
-            message: 'Error saving message to database' 
+            message: 'Error saving message to database',
+            error: process.env.NODE_ENV === 'production' ? 'Database error' : error.message
         });
+    } finally {
+        if (client) client.release();
     }
 });
 
